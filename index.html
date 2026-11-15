@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#140405">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Messages">
+<title>Messages</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #f6f1f1; --surface: #ffffff; --fg: #1d1213; --muted: #6f5e60; --line: #e4d6d7;
+    --accent: #d30a16; --accent-fg: #ffffff; --ok: #1f8a3b;
+    --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #140405; --surface: #22090b; --fg: #f7eeee; --muted: #b59a9c; --line: #46191c;
+            --accent: #e50914; --ok: #4cc66a; color-scheme: dark; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px;
+    padding: max(24px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+             max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  main { max-width: 460px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+  header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  h1 { font-family: var(--font-display); font-weight: 600; font-size: 26px; margin: 0; }
+  .sub { color: var(--muted); margin: 4px 0 0; font-size: 14px; line-height: 1.45; }
+  .gear { background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 12px;
+          width: 42px; height: 42px; display: grid; place-items: center; cursor: pointer; flex: none; }
+  .gear svg { width: 20px; height: 20px; }
+  label { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .field { display: flex; flex-direction: column; gap: 8px; }
+  textarea, input {
+    font: inherit; color: var(--fg); background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; padding: 14px 16px; width: 100%;
+  }
+  textarea { font-size: 18px; line-height: 1.4; min-height: 130px; resize: vertical; }
+  input { font-size: 15px; border-radius: 12px; padding: 12px 14px; }
+  textarea:focus-visible, input:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .count { align-self: flex-end; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .targets { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .send {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px; border: 0; cursor: pointer;
+    padding: 18px 16px; border-radius: 18px; background: var(--accent); color: var(--accent-fg);
+    font-family: var(--font-display); font-weight: 600; font-size: 20px; text-align: left;
+    transition: transform .1s ease, opacity .2s ease;
+  }
+  .send small { font-family: var(--font-body); font-weight: 400; font-size: 13px; opacity: .85; }
+  .send svg { width: 26px; height: 26px; }
+  .send:active { transform: scale(.97); }
+  .send:disabled { opacity: .4; cursor: default; }
+  .settings { display: flex; flex-direction: column; gap: 14px; background: var(--surface);
+              border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+  .settings h2 { font-family: var(--font-display); font-size: 18px; margin: 0; }
+  .settings p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  .save { border: 0; border-radius: 12px; padding: 13px; font: inherit; font-weight: 500;
+          background: var(--fg); color: var(--bg); cursor: pointer; }
+  .toast {
+    position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom));
+    transform: translate(-50%, 140%); opacity: 0;
+    background: var(--fg); color: var(--bg); padding: 12px 18px; border-radius: 999px;
+    font-weight: 500; font-size: 15px; display: flex; align-items: center; gap: 8px;
+    transition: transform .3s ease, opacity .3s ease; max-width: calc(100% - 32px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  }
+  .toast.show { transform: translate(-50%, 0); opacity: 1; }
+  .toast .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); flex: none; }
+  .toast.error .dot { background: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .toast, .send { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Envoyer un message</h1>
+      <p class="sub">Il s'affiche sur l'écran choisi pendant quelques secondes, où que tu sois.</p>
+    </div>
+    <button class="gear" id="open-settings" aria-label="Réglages">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <section class="settings" id="settings" hidden>
+    <h2>Réglages</h2>
+    <p>Colle les deux noms de sujets secrets. Ils restent uniquement sur ce téléphone.</p>
+    <div class="field">
+      <label for="topic-tv">Sujet de la télé</label>
+      <input id="topic-tv" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="tv-…">
+    </div>
+    <div class="field">
+      <label for="topic-pc">Sujet du PC</label>
+      <input id="topic-pc" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="pc-…">
+    </div>
+    <button class="save" id="save">Enregistrer</button>
+  </section>
+
+  <div class="field">
+    <label for="msg">Message</label>
+    <textarea id="msg" maxlength="300" placeholder="À table dans 5 minutes !"></textarea>
+    <span class="count" id="count">0 / 300</span>
+  </div>
+
+  <div class="targets">
+    <button class="send" data-target="tv">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      Télé<small>Salon</small>
+    </button>
+    <button class="send" data-target="pc">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="12" rx="2"/><path d="M7 21h10M12 15v6"/></svg>
+      PC<small>2e écran</small>
+    </button>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span class="dot"></span><span id="toast-text"></span></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const VALID = /^[A-Za-z0-9_-]{1,64}$/;
+  const store = {
+    get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+
+  // Lien de configuration : #tv=xxx&pc=yyy remplit les reglages une fois, puis disparait de l'adresse
+  if (location.hash.length > 1) {
+    const p = new URLSearchParams(location.hash.slice(1));
+    if (VALID.test(p.get("tv") || "")) store.set("topic-tv", p.get("tv"));
+    if (VALID.test(p.get("pc") || "")) store.set("topic-pc", p.get("pc"));
+    history.replaceState(null, "", location.pathname);
+  }
+
+  const topics = () => ({ tv: store.get("topic-tv"), pc: store.get("topic-pc") });
+  const msg = $("msg"), settings = $("settings");
+
+  function showSettings(show) {
+    settings.hidden = !show;
+    if (show) { $("topic-tv").value = topics().tv; $("topic-pc").value = topics().pc; }
+  }
+  $("open-settings").onclick = () => showSettings(settings.hidden);
+  $("save").onclick = () => {
+    const tv = $("topic-tv").value.trim(), pc = $("topic-pc").value.trim();
+    if ((tv && !VALID.test(tv)) || (pc && !VALID.test(pc))) { toast("Nom de sujet invalide", true); return; }
+    store.set("topic-tv", tv); store.set("topic-pc", pc);
+    showSettings(false); toast("Réglages enregistrés");
+  };
+  if (!topics().tv && !topics().pc) showSettings(true);
+
+  let timer;
+  function toast(text, error) {
+    $("toast-text").textContent = text;
+    $("toast").classList.toggle("error", !!error);
+    $("toast").classList.add("show");
+    clearTimeout(timer);
+    timer = setTimeout(() => $("toast").classList.remove("show"), 2600);
+  }
+
+  msg.value = store.get("draft");
+  const updateCount = () => { $("count").textContent = msg.value.length + " / 300"; store.set("draft", msg.value); };
+  msg.addEventListener("input", updateCount);
+  updateCount();
+
+  document.querySelectorAll(".send").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const text = msg.value.trim();
+      const target = btn.dataset.target;
+      const name = target === "tv" ? "la télé" : "le PC";
+      const topic = topics()[target];
+      if (!text) { msg.focus(); toast("Écris d'abord un message", true); return; }
+      if (!topic) { showSettings(true); toast("Ajoute le sujet pour " + name, true); return; }
+      btn.disabled = true;
+      try {
+        const r = await fetch("https://ntfy.sh/" + encodeURIComponent(topic), { method: "POST", body: text });
+        if (!r.ok) throw new Error(r.status);
+        toast("Envoyé sur " + name + " ✓");
+        msg.value = ""; updateCount();
+      } catch (e) {
+        toast("Échec de l'envoi, vérifie ta connexion", true);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+</script>
+</body>
+</html>
