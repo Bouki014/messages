@@ -75,6 +75,18 @@
   .toast.show { transform: translate(-50%, 0); opacity: 1; }
   .toast .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); flex: none; }
   .toast.error .dot { background: var(--accent); }
+  .gif { display: flex; flex-direction: column; gap: 10px; }
+  .gif-row { display: flex; gap: 10px; align-items: stretch; }
+  .gif-pick { flex: none; display: flex; align-items: center; gap: 8px; border: 1px dashed var(--line);
+              background: var(--surface); color: var(--fg); border-radius: 12px; padding: 0 14px;
+              font: inherit; font-weight: 500; font-size: 15px; cursor: pointer; }
+  .gif-pick svg { width: 20px; height: 20px; color: var(--accent); }
+  .gif-row input { min-width: 0; flex: 1; }
+  .gif-preview { position: relative; align-self: flex-start; max-width: 100%; }
+  .gif-preview img { display: block; max-width: 100%; max-height: 200px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
+  .gif-remove { position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; border-radius: 50%; border: 0;
+                background: rgba(0,0,0,.65); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   @media (prefers-reduced-motion: reduce) { .toast, .send { transition: none; } }
 </style>
 </head>
@@ -108,6 +120,22 @@
     <label for="msg">Message</label>
     <textarea id="msg" maxlength="300" placeholder="À table dans 5 minutes !"></textarea>
     <span class="count" id="count">0 / 300</span>
+  </div>
+
+  <div class="gif">
+    <label for="gif-url">GIF (facultatif)</label>
+    <div class="gif-row">
+      <button class="gif-pick" id="gif-pick" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
+        Galerie
+      </button>
+      <input id="gif-url" type="url" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="ou colle le lien d'un GIF">
+    </div>
+    <input class="sr" id="gif-file" type="file" accept="image/gif,image/webp,image/png,image/jpeg" tabindex="-1" aria-hidden="true">
+    <div class="gif-preview" id="gif-preview" hidden>
+      <img id="gif-img" alt="Aperçu du GIF">
+      <button class="gif-remove" id="gif-remove" type="button" aria-label="Retirer le GIF">×</button>
+    </div>
   </div>
 
   <div class="targets">
@@ -178,20 +206,64 @@
   msg.addEventListener("input", updateCount);
   updateCount();
 
+  // GIF : un fichier de la galerie, ou le lien d'un GIF (Giphy, Tenor...)
+  const MAX_BYTES = 14 * 1024 * 1024;   // ntfy.sh accepte jusqu'a 15 Mo
+  let gifFile = null, previewUrl = "";
+  const gifUrl = $("gif-url");
+  function showPreview(src) {
+    $("gif-preview").hidden = !src;
+    if (src) $("gif-img").src = src; else $("gif-img").removeAttribute("src");
+  }
+  function clearGif() {
+    gifFile = null; gifUrl.value = ""; $("gif-file").value = "";
+    if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = ""; }
+    showPreview("");
+  }
+  $("gif-pick").onclick = () => $("gif-file").click();
+  $("gif-file").onchange = () => {
+    const f = $("gif-file").files[0];
+    if (!f) return;
+    if (f.size > MAX_BYTES) { toast("GIF trop lourd (14 Mo maximum)", true); $("gif-file").value = ""; return; }
+    clearGif(); gifFile = f;
+    previewUrl = URL.createObjectURL(f); showPreview(previewUrl);
+  };
+  gifUrl.addEventListener("input", () => {
+    if (gifFile) { gifFile = null; $("gif-file").value = ""; if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = ""; } }
+    const u = gifUrl.value.trim();
+    showPreview(/^https?:\/\/\S+$/i.test(u) ? u : "");
+  });
+  $("gif-img").onerror = () => { if (!gifFile && gifUrl.value.trim()) toast("Ce lien n'est pas une image : copie l'adresse du GIF lui-même", true); };
+  $("gif-remove").onclick = clearGif;
+
   document.querySelectorAll(".send").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const text = msg.value.trim();
+      const link = gifUrl.value.trim();
       const target = btn.dataset.target;
       const name = target === "tv" ? "la télé" : "le PC";
       const topic = topics()[target];
-      if (!text) { msg.focus(); toast("Écris d'abord un message", true); return; }
+      if (!text && !gifFile && !link) { msg.focus(); toast("Écris un message ou ajoute un GIF", true); return; }
+      if (link && !gifFile && !/^https?:\/\/\S+$/i.test(link)) { toast("Le lien du GIF doit commencer par https://", true); return; }
       if (!topic) { showSettings(true); toast("Ajoute le sujet pour " + name, true); return; }
       btn.disabled = true;
       try {
-        const r = await fetch("https://ntfy.sh/" + encodeURIComponent(topic), { method: "POST", body: text });
+        const base = "https://ntfy.sh/" + encodeURIComponent(topic);
+        const q = new URLSearchParams();
+        let r;
+        if (gifFile) {
+          const ext = (gifFile.name.split(".").pop() || "gif").toLowerCase();
+          q.set("filename", "gif." + ext);
+          if (text) q.set("message", text);
+          r = await fetch(base + "?" + q, { method: "PUT", body: gifFile });
+        } else if (link) {
+          q.set("attach", link);
+          r = await fetch(base + "?" + q, { method: "POST", body: text });
+        } else {
+          r = await fetch(base, { method: "POST", body: text });
+        }
         if (!r.ok) throw new Error(r.status);
         toast("Envoyé sur " + name + " ✓");
-        msg.value = ""; updateCount();
+        msg.value = ""; updateCount(); clearGif();
       } catch (e) {
         toast("Échec de l'envoi, vérifie ta connexion", true);
       } finally {
